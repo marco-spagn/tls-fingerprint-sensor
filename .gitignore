@@ -1,0 +1,12 @@
+# local certificate material — never commit
+server.crt
+server.key
+
+# runtime database
+observations.db
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
