@@ -192,10 +192,18 @@ def render_dashboard(store: Store, this_verdict: Optional[dict]) -> str:
     def esc(x: object) -> str:
         return html.escape(str(x))
 
-    def grease_badge(present: bool) -> str:
+    def grease_badge(present: bool, ua: str = "") -> str:
         if present:
             return "<span class='pill pill-ok'>GREASE ✓ browser-like</span>"
-        return "<span class='pill pill-bad'>no GREASE · tool/script</span>"
+        hdr = {"user-agent": ua}
+        # Absence of GREASE only *contradicts* a Chromium/Safari UA. For Firefox
+        # it is normal, and for an honest tool UA it is expected — so don't cry
+        # "tool/script" at a browser the signal doesn't even apply to.
+        if detection.expects_grease(hdr):
+            return "<span class='pill pill-bad'>no GREASE ✗ (contradicts UA)</span>"
+        if detection.claims_firefox(hdr):
+            return "<span class='pill pill-neutral'>no GREASE (normal for Firefox)</span>"
+        return "<span class='pill pill-neutral'>no GREASE (tool/script)</span>"
 
     # ---- "this connection" card: JA3 vs JA4 side by side --------------------
     this_html = ""
@@ -222,7 +230,8 @@ def render_dashboard(store: Store, this_verdict: Optional[dict]) -> str:
               <span style="color:{colour}">{esc(this_verdict['verdict'])}</span>
               <span class="muted">(score {esc(this_verdict['score'])})</span></h2>
           <p><b>User-Agent:</b> {esc(this_verdict['user_agent']) or '<i>(none)</i>'}
-             &nbsp; {grease_badge(this_verdict.get('has_grease', False))}</p>
+             &nbsp; {grease_badge(this_verdict.get('has_grease', False),
+                                  this_verdict.get('user_agent', ''))}</p>
 
           <div class="split">
             <div class="halfcard">
@@ -285,7 +294,7 @@ def render_dashboard(store: Store, this_verdict: Optional[dict]) -> str:
         f"<td><code>{esc(r[1])}</code></td>"
         f"<td>{esc(r[2])}</td>"
         f"<td class='{'block' if r[3] else ''}'>{esc(r[3])}</td>"
-        f"<td>{grease_badge(bool(r[4]))}</td>"
+        f"<td>{grease_badge(bool(r[4]), r[8] if len(r) > 8 else '')}</td>"
         f"<td>{esc(r[5] and _tls_version_name(r[5]))}</td>"
         f"<td>{esc(r[6])}</td><td>{esc(r[7])}</td>"
         f"</tr>"
@@ -336,6 +345,7 @@ def render_dashboard(store: Store, this_verdict: Optional[dict]) -> str:
           font-size:.72rem; font-weight:600 }}
  .pill-ok {{ background:#e6f7ee; color:#1d8a4e }}
  .pill-bad {{ background:#fdecea; color:#c0392b }}
+ .pill-neutral {{ background:#eef1f4; color:#667 }}
  .tblwrap {{ overflow-x:auto }}
 </style></head><body>
  <h1>TLS Fingerprint Sensor</h1>

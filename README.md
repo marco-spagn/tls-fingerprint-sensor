@@ -25,12 +25,21 @@ Neither Python's `ssl` module nor most TLS libraries expose the raw
 
 ## The detection idea
 
-Real browsers (Chrome, Safari, Firefox) emit **GREASE** values (RFC 8701) in
-their `ClientHello` and carry a large, characteristic extension set. Standard
-HTTP clients — Python `requests`/`urllib`, `curl`, Go `net/http` — do not. So a
-request whose **headers** claim to be Chrome but whose **handshake** has no
-GREASE is almost certainly automation wearing a costume. The engine
-(`detection.py`) turns that intuition into a transparent, explainable score.
+**Chromium (BoringSSL) and Safari** emit **GREASE** values (RFC 8701) in their
+`ClientHello`; standard HTTP clients — Python `requests`/`urllib`, `curl`, Go
+`net/http` — do not. So a request whose **headers** claim to be Chrome but whose
+**handshake** has no GREASE is almost certainly automation wearing a costume.
+
+A subtlety worth calling out (and handled explicitly in the engine):
+**Firefox does *not* reliably inject GREASE.** Treating "no GREASE" as proof of a
+bot would therefore false-positive every genuine Firefox. So the GREASE rule is
+scoped to Chromium/Safari User-Agents, and a **GREASE-independent** signal backs
+it up: every mainstream browser — Chrome, Safari *and* Firefox — offers HTTP/2
+(`h2`) in ALPN, whereas standard-library clients offer only `http/1.1`. That
+catches an impostor spoofing a Firefox UA, where the GREASE rule intentionally
+stays silent. The engine (`detection.py`) turns all of this into a transparent,
+rule-by-rule score, and the dashboard's GREASE badge is UA-aware (it says
+"normal for Firefox" rather than "tool/script" when the UA is Firefox).
 
 ## Files
 

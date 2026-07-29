@@ -54,8 +54,34 @@ def claims_safari(headers: Dict[str, str]) -> bool:
     )
 
 
-def claims_browser(headers: Dict[str, str]) -> bool:
+def claims_firefox(headers: Dict[str, str]) -> bool:
+    """Genuine Mozilla Firefox. Chromium/Safari say 'like Gecko' but never carry
+    the 'firefox/' product token, so require it plus a Gecko build id."""
+    ua = _ua(headers).lower()
+    if "mozilla/5.0" not in ua:
+        return False
+    return (
+        "firefox/" in ua
+        and "gecko/" in ua
+        and "chrome" not in ua
+        and "chromium" not in ua
+        and "edg/" not in ua
+    )
+
+
+def expects_grease(headers: Dict[str, str]) -> bool:
+    """Which claimed browsers reliably emit GREASE in their ClientHello.
+
+    Chromium (BoringSSL) and Safari do; **Firefox does not** inject GREASE the
+    same way, so a GREASE-free handshake is not, on its own, evidence against a
+    Firefox User-Agent. Scoping the GREASE rule to these two avoids flagging
+    every genuine Firefox as a bot.
+    """
     return claims_chromium(headers) or claims_safari(headers)
+
+
+def claims_browser(headers: Dict[str, str]) -> bool:
+    return claims_chromium(headers) or claims_safari(headers) or claims_firefox(headers)
 
 
 def evaluate(headers: Dict[str, str], hello: ClientHello) -> Verdict:
@@ -67,15 +93,18 @@ def evaluate(headers: Dict[str, str], hello: ClientHello) -> Verdict:
     score = 0
 
     browser_ua = claims_browser(headers)
+    grease_expected = expects_grease(headers)
     real_ext = [e for e in hello.extensions if not is_grease(e)]
 
-    # Signal 1 (strong): a real browser ALWAYS emits GREASE in its ClientHello.
-    # A browser User-Agent over a GREASE-free handshake is the classic tell of a
-    # standard-library HTTP client (Python requests/urllib, curl, Go net/http).
-    if browser_ua and not hello.has_grease:
+    # Signal 1 (strong): Chromium and Safari ALWAYS emit GREASE in their
+    # ClientHello. Such a User-Agent over a GREASE-free handshake is the classic
+    # tell of a standard-library HTTP client (Python requests/urllib, curl, Go
+    # net/http). NB: scoped to grease_expected, NOT browser_ua — Firefox does not
+    # reliably send GREASE, so applying this to Firefox would be a false positive.
+    if grease_expected and not hello.has_grease:
         score += 70
         reasons.append(
-            "browser User-Agent but ClientHello contains no GREASE values "
+            "Chromium/Safari User-Agent but ClientHello contains no GREASE values "
             "(standard-library TLS stack)"
         )
 
@@ -101,6 +130,18 @@ def evaluate(headers: Dict[str, str], hello: ClientHello) -> Verdict:
     if browser_ua and not hello.has_sni:
         score += 20
         reasons.append("browser User-Agent but no SNI extension")
+
+    # Signal 5 (strong, GREASE-independent): every mainstream browser — Chrome,
+    # Safari AND Firefox — offers HTTP/2 via the ALPN extension ("h2"). Standard
+    # library clients (python-requests/urllib, default Go) offer only http/1.1.
+    # This is what catches an impostor that spoofs a *Firefox* User-Agent, where
+    # the GREASE rule deliberately does not apply.
+    if browser_ua and "h2" not in [p.lower() for p in hello.alpn]:
+        score += 50
+        reasons.append(
+            "browser User-Agent but the handshake does not offer HTTP/2 in ALPN "
+            f"(alpn={hello.alpn or 'none'})"
+        )
 
     if not reasons:
         reasons.append("TLS fingerprint is consistent with the declared User-Agent")
