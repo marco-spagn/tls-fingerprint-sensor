@@ -83,9 +83,26 @@ ja4     : t13d1812h1_85036bcba153_856db9a6daa0
 reasons : browser User-Agent but ClientHello contains no GREASE values (standard-library TLS stack)
 ```
 
-- **`/`** — HTML dashboard: this connection's verdict plus recent observations
-  and the top JA4 fingerprints seen.
-- **`/stats`** — JSON aggregates (handy for scraping into Grafana/CI).
+- **`/`** — HTML dashboard (auto-refreshes every 10s). It now centres on the
+  **JA3 vs JA4 comparison**:
+  - a *This connection* card showing **JA3 and JA4 side by side** — the JA3 MD5
+    plus its raw pre-hash string, and the JA4 **decoded into its parts**
+    (transport, TLS version, SNI flag, cipher/extension counts, ALPN, and the
+    two SHA-256 halves), so you can see exactly what JA4 encodes that JA3 hides;
+  - an *Observed handshake* panel (negotiated TLS version, GREASE yes/no, cipher
+    / extension / signature-algorithm counts, ALPN, SNI);
+  - a short **JA3 vs JA4 explainer** (order-sensitivity, structure, TLS 1.3/ALPN
+    awareness);
+  - a **JA3 ↔ JA4 correlation** table — per `(JA4, JA3)` pair with count,
+    blocked count, GREASE, TLS version and cipher/extension counts, so you can
+    spot when several JA3s collapse into one JA4 (cosmetic reordering that JA4
+    folds together);
+  - four headline counters: total requests, blocked, **unique JA3**, **unique
+    JA4**;
+  - an enriched *Recent observations* table (TLS, GREASE, ciph/ext, JA4 and JA3).
+- **`/stats`** — JSON aggregates, now including `unique_ja3`, `unique_ja4`,
+  `distinct_ja3` per JA4, a full `ja3_ja4_correlation` array, and a decoded
+  `ja4_decoded` for the current connection (handy for scraping into Grafana/CI).
 - **any other path** — plain-text verdict for the current connection.
 
 ## Endpoints
